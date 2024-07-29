@@ -1,8 +1,13 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-
 use std::sync::{Arc, Mutex};
-use rodio::Sink;
+use std::{fs, thread};
+use std::fs::File;
+use std::io::BufReader;
+use rodio::{Decoder, OutputStream, Sink};
+use tauri::State;
+
+use model::Song;
 
 mod model;
 
@@ -14,7 +19,7 @@ struct AppState {
 fn get_songs() -> Vec<Song> {
   let mut music_files = Vec::new();
 
-  let entries = fs::read_dir("../../assets").unwrap();
+  let entries = fs::read_dir("../assets").unwrap();
 
   for entry in entries {
     let entry = entry.unwrap();
@@ -23,10 +28,12 @@ fn get_songs() -> Vec<Song> {
     if path.is_file() {
       if let Some(file_name) = path.file_name() {
         if let Some(file_name_str) = file_name.to_str() {
-          let song = Song {
-            title: file_name_str.to_string()
-          };
-          music_files.push(song);
+          if file_name_str.ends_with(".mp3") {
+            let song = Song {
+                title: file_name_str.to_string()
+            };
+            music_files.push(song);
+          }
         }
       }
     }
@@ -35,8 +42,8 @@ fn get_songs() -> Vec<Song> {
 }
 
 #[tauri::command]
-fn play_song(title: Sting, state: State<'_, Arc<AppState>>) {
-  let path = format!("../../assets/{}", title);
+fn play_song(title: String, state: State<'_, Arc<AppState>>) {
+  let path = format!("../assets/{}", title);
   let state = state.inner().clone();
 
   thread::spawn(move || {
@@ -77,7 +84,7 @@ fn play_song(title: Sting, state: State<'_, Arc<AppState>>) {
         current.pause();
       }
 
-      *current_song = Some(sink.clone())
+      *current_song = Some(sink.clone());
     }
 
     sink.set_volume(1.0);
@@ -88,7 +95,7 @@ fn play_song(title: Sting, state: State<'_, Arc<AppState>>) {
 
 #[tauri::command]
 fn pause_song(state: State<'_, Arc<AppState>>) {
-  let mut current_song = state.current_song.lock().unwrap();
+  let current_song = state.current_song.lock().unwrap();
   if let Some(ref sink) = *current_song {
     sink.pause();
   }
@@ -96,7 +103,7 @@ fn pause_song(state: State<'_, Arc<AppState>>) {
 
 #[tauri::command]
 fn set_volume(vol: f32, state: State<'_, Arc<AppState>>) {
-  let mut current_song = state.current_song.lock().unwrap();
+  let current_song = state.current_song.lock().unwrap();
   if let Some(ref sink) = *current_song {
     sink.set_volume(vol);
   }
